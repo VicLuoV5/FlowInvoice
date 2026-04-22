@@ -36,7 +36,7 @@
 ### 方式 A：源码运行（开发者 / 跨平台）
 
 ```bash
-git clone https://github.com/<你的用户名>/FlowInvoice.git
+git clone https://github.com/VicLuoV5/FlowInvoice.git
 cd FlowInvoice
 pip install -r requirements.txt
 ```
@@ -55,7 +55,7 @@ streamlit run web_app.py
 
 ### 方式 B：Windows 可执行文件（非开发者）
 
-从 [Releases](https://github.com/<你的用户名>/FlowInvoice/releases) 下载 `FlowInvoice.exe`，双击运行。
+从 [Releases](https://github.com/VicLuoV5/FlowInvoice/releases) 下载 `FlowInvoice.exe`，双击运行。
 
 自己打包：
 
