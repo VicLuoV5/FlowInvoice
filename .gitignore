@@ -1,0 +1,44 @@
+# 1. Python 编译文件与缓存
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# 2. 打包与构建生成的临时文件
+build/
+dist/
+*.egg-info/
+*.spec
+!app.spec
+
+# 3. 虚拟环境
+venv/
+env/
+.env
+
+# 4. 业务隐私数据与输出结果 (极其重要！防止发票泄露)
+*.pdf
+*.jpg
+*.jpeg
+*.png
+!docs/*.pdf
+!example_data/*.jpg
+!example_data/*.pdf
+
+# 忽略生成的 Excel 明细汇总
+*.xlsx
+*.xls
+*.csv
+
+# 5. Streamlit 主题配置（需提交）
+!.streamlit/
+!.streamlit/config.toml
+
+# 6. IDE 与操作系统缓存
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 7. Claude Code 本地设置
+.claude/
