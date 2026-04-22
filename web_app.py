@@ -135,3 +135,15 @@ if st.session_state.get("invoices"):
                     use_container_width=True)
             else:
                 st.error(msg)
+
+# ================= 页脚：GitHub Star 入口 =================
+st.markdown(
+    """
+    <div style='text-align:center; color:#8C8070; margin-top:48px;
+                font-size:0.85em; padding-bottom:20px;'>
+      ⭐ 觉得好用？
+      <a href='https://github.com/VicLuoV5/FlowInvoice' target='_blank'
+         style='color:#D97757; text-decoration:none;'>在 GitHub 点亮星标</a>
+    </div>
+    """,
+    unsafe_allow_html=True)

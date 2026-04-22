@@ -22,6 +22,8 @@ env/
 *.jpeg
 *.png
 !docs/*.pdf
+!docs/screenshots/*.png
+!docs/screenshots/*.jpg
 !example_data/*.jpg
 !example_data/*.pdf
 

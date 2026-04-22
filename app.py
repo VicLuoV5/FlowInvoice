@@ -1,5 +1,6 @@
 import os
 import threading
+import webbrowser
 import customtkinter as ctk
 from tkinter import messagebox
 
@@ -12,12 +13,14 @@ try:
 except ImportError:
     HAS_WINDOW_STYLES = False
 
+GITHUB_URL = "https://github.com/VicLuoV5/FlowInvoice"
+
 class FlowInvoiceApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
         self.title(config.PAGE_TITLE)
-        self.geometry("450x520")
+        self.geometry("450x560")
         self.eval('tk::PlaceWindow . center')
 
         if HAS_WINDOW_STYLES and os.name == 'nt':
@@ -133,7 +136,18 @@ class FlowInvoiceApp(ctk.CTk):
         ctk.CTkLabel(self,
                      text="将报销发票放入「初始发票箱」后，点击上方按钮开始处理",
                      font=font_hint,
-                     text_color=("gray60", "gray50")).pack(pady=(0, 20))
+                     text_color=("gray60", "gray50")).pack(pady=(0, 6))
+
+        # ── GitHub Star 入口（克制，低调） ───────────────────────
+        ctk.CTkButton(self,
+                      text="⭐ 觉得好用？在 GitHub 点亮星标",
+                      font=font_link,
+                      fg_color="transparent",
+                      text_color=("gray60", "gray55"),
+                      hover_color=("gray85", "gray22"),
+                      border_width=0,
+                      width=220,
+                      command=lambda: webbrowser.open(GITHUB_URL)).pack(pady=(0, 18))
 
     def check_env(self):
         if not os.path.exists(config.INPUT_FOLDER):
