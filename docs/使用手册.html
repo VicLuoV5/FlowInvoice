@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>极简票流 FlowInvoice 使用手册</title>
+<style>
+@page {
+    size: A4;
+    margin: 2cm 2cm 2cm 2cm;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: "Microsoft YaHei", "微软雅黑", -apple-system, sans-serif;
+    color: #3D3929;
+    line-height: 1.75;
+    font-size: 14px;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 32px;
+    background: #FFFFFF;
+}
+
+h1 {
+    color: #D97757;
+    font-size: 28px;
+    border-bottom: 3px solid #D97757;
+    padding-bottom: 12px;
+    margin-top: 0;
+    page-break-before: auto;
+}
+
+h2 {
+    color: #D97757;
+    font-size: 20px;
+    border-left: 4px solid #D97757;
+    padding-left: 12px;
+    margin-top: 36px;
+    page-break-after: avoid;
+}
+
+h3 {
+    color: #3D3929;
+    font-size: 16px;
+    margin-top: 24px;
+    page-break-after: avoid;
+}
+
+p, li {
+    color: #3D3929;
+    line-height: 1.8;
+}
+
+a {
+    color: #D97757;
+    text-decoration: none;
+    word-break: break-all;
+}
+
+a:hover { text-decoration: underline; }
+
+strong { color: #3D3929; }
+
+code {
+    background: #F5F2EB;
+    color: #B8431D;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 0.9em;
+}
+
+pre {
+    background: #2A271D;
+    color: #FBEAE0;
+    padding: 16px;
+    border-radius: 6px;
+    overflow-x: auto;
+    line-height: 1.5;
+    page-break-inside: avoid;
+}
+
+pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+}
+
+blockquote {
+    border-left: 4px solid #D97757;
+    background: #FBEAE0;
+    margin: 16px 0;
+    padding: 12px 16px;
+    color: #3D3929;
+    border-radius: 0 4px 4px 0;
+}
+
+blockquote p { margin: 4px 0; }
+
+img {
+    max-width: 100%;
+    border: 1px solid #E8E4DB;
+    border-radius: 4px;
+    margin: 12px 0;
+    display: block;
+    page-break-inside: avoid;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 16px 0;
+    page-break-inside: avoid;
+}
+
+th {
+    background: #D97757;
+    color: #FFFFFF;
+    padding: 10px 12px;
+    text-align: left;
+    font-weight: bold;
+}
+
+td {
+    border: 1px solid #E8E4DB;
+    padding: 10px 12px;
+}
+
+tr:nth-child(even) td { background: #FBF8F2; }
+
+hr {
+    border: none;
+    border-top: 1px solid #E8E4DB;
+    margin: 32px 0;
+}
+
+ul, ol { padding-left: 24px; }
+li { margin: 4px 0; }
+
+/* 目录链接样式更紧凑 */
+ul li a { color: #3D3929; }
+ul li a:hover { color: #D97757; }
+
+/* 打印优化 */
+@media print {
+    body {
+        padding: 0;
+        max-width: 100%;
+    }
+    a { color: #D97757; }
+    pre, blockquote, img, table { page-break-inside: avoid; }
+    h1, h2, h3 { page-break-after: avoid; }
+}
+</style>
+</head>
+<body>
+<h1 id="flowinvoice">🧾 极简票流 FlowInvoice 使用手册</h1>
+<blockquote>
+<p>本手册面向<strong>完全不懂技术</strong>的读者。照做每一步，5 分钟内你就能完成第一次发票整理。</p>
+</blockquote>
+<hr>
+<h2 id="_1">📋 目录</h2>
+<ul>
+<li><a href="#0-5-秒看懂这是什么">0. 5 秒看懂这是什么</a></li>
+<li><a href="#1-下载与安装">1. 下载与安装</a></li>
+<li><a href="#2-场景-a单次差旅报销">2. 场景 A：单次差旅报销</a></li>
+<li><a href="#3-场景-b月度批量整理">3. 场景 B：月度批量整理</a></li>
+<li><a href="#4-场景-c只要合并打印不要算税">4. 场景 C：只要合并打印不要算税</a></li>
+<li><a href="#5-excel-怎么看">5. Excel 怎么看</a></li>
+<li><a href="#6-网页端什么时候用">6. 网页端什么时候用</a></li>
+<li><a href="#7-常见问题">7. 常见问题</a></li>
+<li><a href="#8-找我反馈">8. 找我反馈</a></li>
+</ul>
+<hr>
+<h2 id="0-5">0. 5 秒看懂这是什么</h2>
+<p><strong>极简票流</strong> 解决两件烦人的事：</p>
+<ol>
+<li><strong>把一堆零散的发票（PDF / 手机拍照 / 扫描件）自动居中排版拼到 A4 纸上</strong>，不用你手动调一晚上</li>
+<li><strong>自动读出每张票的金额、日期、号码，算好税额，生成 Excel</strong>，不用你拿计算器一张张敲</li>
+</ol>
+<p>所有处理<strong>在你自己电脑上完成</strong>，不会上传到任何云服务器，发票隐私 0 泄露。</p>
+<hr>
+<h2 id="1">1. 下载与安装</h2>
+<h3 id="_2">👤 如果你不懂技术（推荐路径）</h3>
+<ol>
+<li>浏览器打开 https://github.com/VicLuoV5/FlowInvoice/releases</li>
+<li>找到最新版（一般排最上面），展开 <code>Assets</code></li>
+<li>点击 <code>FlowInvoice.exe</code> 下载（约 180 MB）</li>
+<li>下载完<strong>双击直接运行</strong>，无需安装任何东西</li>
+</ol>
+<blockquote>
+<p>💡 <strong>首次打开较慢</strong>：Windows 需要 3-8 秒解压程序，属正常现象，别以为死机了。</p>
+</blockquote>
+<h3 id="_3">🧑‍💻 如果你是开发者</h3>
+<pre><code class="language-bash">git clone https://github.com/VicLuoV5/FlowInvoice.git
+cd FlowInvoice
+pip install -r requirements.txt
+python app.py          # 启动桌面端
+streamlit run web_app.py  # 启动网页端
+</code></pre>
+<hr>
+<h2 id="2-a">2. 场景 A：单次差旅报销</h2>
+<blockquote>
+<p><strong>典型情境</strong>：你上周出差 3 天，攒了机票 / 高铁票 / 打车票 / 酒店票 / 吃饭发票，现在要合并打印 + 填报销明细表交财务。</p>
+</blockquote>
+<h3 id="1_1">第 1 步：启动程序</h3>
+<p>双击 <code>FlowInvoice.exe</code>，出现这个主界面：</p>
+<p><img alt="桌面端主界面" src="./screenshots/desktop-home.png"></p>
+<h3 id="2">第 2 步：把发票放进"初始发票箱"</h3>
+<ol>
+<li>点击界面上的 <strong>「打 开」</strong> 橙色按钮，Windows 资源管理器会弹出 <code>初始发票箱</code> 文件夹</li>
+<li>把你所有的发票文件（PDF、手机拍的 JPG、扫描的 PNG 都行）<strong>拖到这个文件夹里</strong></li>
+</ol>
+<p><img alt="初始发票箱" src="./screenshots/inbox.png"></p>
+<blockquote>
+<p>💡 <strong>如何控制发票顺序？</strong> 把文件名前面加上编号。比如 <code>01_机票.pdf</code>、<code>02_高铁票.pdf</code>、<code>03_酒店.pdf</code>，程序会按这个编号顺序合并。</p>
+</blockquote>
+<h3 id="3">第 3 步：一键合并排版</h3>
+<ol>
+<li>回到主界面，选择 <strong>「横向排版」</strong> 或 <strong>「竖向排版」</strong></li>
+<li><strong>横向</strong> = A4 横着放，适合发票本身比较宽（如机票、酒店行）</li>
+<li><strong>竖向</strong> = A4 竖着放，适合打车票、电子发票等</li>
+<li><strong>不确定就选横向</strong>，兼容性最好</li>
+<li>点击橙色的 <strong>「1. 一键智能排版」</strong> 按钮</li>
+<li>按钮上会实时显示进度 <code>⏳ 排版 3/10  文件名</code></li>
+<li>几秒钟后弹出成功提示：</li>
+</ol>
+<p><img alt="排版成功提示" src="./screenshots/merge-success.png"></p>
+<ol>
+<li>去 <code>00-生成器</code> 文件夹里找到 <code>合并后_报销单(横向).pdf</code> — 这就是你要<strong>打印</strong>的报销单，所有发票已居中排版好</li>
+</ol>
+<h3 id="4-ai-excel">第 4 步：AI 提取算税生成 Excel</h3>
+<ol>
+<li>回到主界面，点击深褐色的 <strong>「2. AI 提取算税」</strong> 按钮</li>
+<li>按钮显示 <code>⏳ 识别 3/10 文件名</code>，OCR 引擎正在读取每张发票</li>
+<li>完成后弹出提示，告诉你成功提取了 N 张票据</li>
+<li>去 <code>00-生成器</code> 文件夹里找到 <code>发票报销明细汇总.xlsx</code> — 这就是你要<strong>交给财务</strong>的明细表</li>
+</ol>
+<h3 id="5">第 5 步：完成！</h3>
+<ul>
+<li>打印 <code>合并后_报销单(横向).pdf</code> → 粘贴纸质发票时的顺序依据</li>
+<li>把 <code>发票报销明细汇总.xlsx</code> 发给财务 → 含封面汇总 + 每张票详细明细</li>
+<li>点击 <strong>「清空发票箱」</strong> 清理文件，准备下一次报销</li>
+</ul>
+<hr>
+<h2 id="3-b">3. 场景 B：月度批量整理</h2>
+<blockquote>
+<p><strong>典型情境</strong>：你是自由职业者 / 个体户 / 小微企业主，每月要汇总所有发票做账。</p>
+</blockquote>
+<p><strong>流程和场景 A 一样</strong>，但有几个月度使用的技巧：</p>
+<h3 id="1_2">技巧 1：按日期给文件命名</h3>
+<pre><code>20260301_滴滴.pdf
+20260303_高铁上海虹桥-金华.pdf
+20260305_酒店维也纳.pdf
+20260308_午餐.jpg
+</code></pre>
+<p>这样文件名自动按日期排序，合并后的 PDF 顺序 = 时间顺序，一眼能对账。</p>
+<h3 id="2excel">技巧 2：Excel 封面可直接做交接单</h3>
+<p>生成的 Excel 第一页是按类型汇总的表格：</p>
+<p><img alt="Excel 封面页" src="./screenshots/excel-cover.png"></p>
+<p>打印这一页 → 你和会计的交接单（总金额一目了然）。</p>
+<h3 id="3_1">技巧 3：发现异常立即核对</h3>
+<p>打开 Excel 第二页 <code>报销明细</code>，看带<strong>颜色</strong>的行：<br>
+- 🟥 <strong>红色行</strong> = 置信度 &lt; 50%，OCR 可能识别错了，建议立即人工看原票核对<br>
+- 🟨 <strong>黄色行</strong> = 置信度 50-79%，建议抽查一下金额<br>
+- ⬜ <strong>白色行</strong> = 高置信度，正常不用管</p>
+<hr>
+<h2 id="4-c">4. 场景 C：只要合并打印不要算税</h2>
+<blockquote>
+<p><strong>典型情境</strong>：财务系统会自动导入发票数据，你只需要一张打印稿做凭证附件。</p>
+</blockquote>
+<p><strong>更简单，只用 3 步：</strong></p>
+<ol>
+<li>发票拖进 <code>初始发票箱</code></li>
+<li>点 <strong>「1. 一键智能排版」</strong></li>
+<li>打印生成的合并 PDF</li>
+</ol>
+<p><strong>完全不用</strong>点「2. AI 提取算税」。</p>
+<hr>
+<h2 id="5-excel">5. Excel 怎么看</h2>
+<h3 id="1_3">第 1 页：封面汇总</h3>
+<p><img alt="Excel 封面页" src="./screenshots/excel-cover.png"></p>
+<p>这一页告诉你：<br>
+- <strong>填报人</strong>（显示"请填写" → 你自己手动填上名字）<br>
+- <strong>生成日期</strong>（自动填今天）<br>
+- <strong>按类型汇总的金额</strong>：机票 X 元、高铁 X 元、打车 X 元...<br>
+- <strong>合计行</strong>：所有发票总数 + 总金额</p>
+<h3 id="2_1">第 2 页：报销明细</h3>
+<p><img alt="Excel 明细页" src="./screenshots/excel-detail.png"></p>
+<p>每一行一张发票，9 列信息：</p>
+<table>
+<thead>
+<tr>
+<th>列</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文件名</td>
+<td>对应"初始发票箱"里的原始文件</td>
+</tr>
+<tr>
+<td>业务分类</td>
+<td>机票/高铁/打车/加油/通讯/餐饮/住宿/增值税</td>
+</tr>
+<tr>
+<td>日期</td>
+<td>发票开具日</td>
+</tr>
+<tr>
+<td>发票号码</td>
+<td>8-24 位数字</td>
+</tr>
+<tr>
+<td>不含税金额</td>
+<td>价税分离后的净额</td>
+</tr>
+<tr>
+<td>税额</td>
+<td>可抵扣税额（餐饮为 0）</td>
+</tr>
+<tr>
+<td>价税合计(报销额)</td>
+<td><strong>你实际报销的金额</strong></td>
+</tr>
+<tr>
+<td>置信度(%)</td>
+<td>OCR 识别把握，越高越可信</td>
+</tr>
+<tr>
+<td>备注</td>
+<td><code>⚠️ 疑似重复</code>、<code>餐饮税额不可抵扣</code> 等提示</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_4">颜色规则</h3>
+<ul>
+<li>🟥 红色底 = 置信度 &lt; 50%，<strong>必须人工核对</strong></li>
+<li>🟨 黄色底 = 置信度 50-79%，<strong>建议抽查</strong></li>
+<li>⬜ 白色底 = 高可信，一般无需干预</li>
+</ul>
+<hr>
+<h2 id="6">6. 网页端什么时候用</h2>
+<p>桌面端适合<strong>快速批处理</strong>，网页端适合<strong>精细编辑</strong>。</p>
+<h3 id="_5">什么时候用网页端</h3>
+<ul>
+<li>你的发票有模糊 / 缺角 / OCR 可能识别错，想<strong>在生成 Excel 之前就手动修正</strong></li>
+<li>你想<strong>删掉几行不想报销的票</strong>再导出</li>
+<li>你在 Mac / Linux 上（<code>.exe</code> 只能在 Windows 用）</li>
+</ul>
+<h3 id="_6">启动网页端</h3>
+<p>在命令行（或开发环境）：</p>
+<pre><code class="language-bash">streamlit run web_app.py
+</code></pre>
+<p>浏览器会自动弹出：</p>
+<p><img alt="网页端主界面" src="./screenshots/web-home.png"></p>
+<h3 id="_7">使用流程</h3>
+<ol>
+<li><strong>拖拽发票</strong>到上传区（或点 Browse files 选文件）</li>
+<li>选排版方向 → 点 <strong>「1. 一键智能排版」</strong> 下载合并 PDF</li>
+<li>点 <strong>「2. AI 提取算税」</strong> 进入<strong>可编辑表格</strong></li>
+</ol>
+<p><img alt="网页端编辑视图" src="./screenshots/web-editor.png"></p>
+<p>在这个表格里你可以：<br>
+- <strong>直接改单元格的值</strong>（比如 OCR 把金额看错了，点击直接改）<br>
+- 用下拉菜单<strong>改业务分类</strong><br>
+- 看到 <code>⚠️ N 个文件未能识别</code> 的折叠面板时，点开看哪些文件失败了，可以对照原票手动补录<br>
+- 确认数据都对了，点底部 <strong>「📥 生成并下载 Excel」</strong> 得到最终报告</p>
+<hr>
+<h2 id="7">7. 常见问题</h2>
+<h3 id="q1">Q1：我的发票完全没被识别出来</h3>
+<p>可能原因：<br>
+- 图片太模糊（手机拍照晃了）→ 重拍一张清晰的<br>
+- 不属于程序支持的类型 → 目前支持：机票、高铁、打车、加油、通讯、餐饮、住宿、增值税，<strong>其他类型会进入失败列表</strong></p>
+<p>处理：用<strong>网页端</strong>的可编辑表格手动补录一行。</p>
+<h3 id="q2">Q2：识别结果里金额不对</h3>
+<p>这是 OCR 的正常误差。<br>
+- <strong>红色 / 黄色行</strong> 就是程序告诉你"这行我拿不准"<br>
+- 去网页端打开可编辑表格，直接改单元格的数字，再生成 Excel</p>
+<h3 id="q3-0">Q3：餐饮发票的"税额"为什么显示 0</h3>
+<p>按国税规定，<strong>餐饮服务增值税不可抵扣进项</strong>。程序遵守这个规则，把价税合计原样作为报销额，税额填 0。备注列会有文字提示。</p>
+<h3 id="q4-excel">Q4：生成 Excel 时提示"文件正被占用"</h3>
+<p>你的 Excel 文件还在 Office 里开着，占用了文件锁。关掉 Excel 后再点生成按钮即可。</p>
+<h3 id="q5">Q5：发票数据会上传到云端吗？</h3>
+<p><strong>不会。</strong> 一切处理都在你本机上：<br>
+- OCR 引擎（RapidOCR）用的是本地 ONNX 模型<br>
+- PDF 解析用的是本地 PyMuPDF<br>
+- Excel 生成用的是本地 pandas<br>
+- 没有任何一步访问互联网</p>
+<p>你可以断网运行这个程序，完全正常。</p>
+<h3 id="q6">Q6：一次最多处理多少张发票？</h3>
+<p>测试过 50 张不卡顿。再多理论上也没问题，只是等得久一些（OCR 每张约 2-5 秒）。</p>
+<h3 id="q7">Q7：怎么升级到新版本？</h3>
+<ul>
+<li>如果用 <code>.exe</code>：去 Releases 页面下载新版本替换旧的即可</li>
+<li>如果用源码：<code>git pull</code> 然后 <code>pip install -r requirements.txt</code></li>
+</ul>
+<h3 id="q8-bug">Q8：发现了 Bug / 想要新功能怎么办？</h3>
+<p>去 https://github.com/VicLuoV5/FlowInvoice/issues 提一个 Issue，描述清楚就行。</p>
+<hr>
+<h2 id="8">8. 找我反馈</h2>
+<ul>
+<li><strong>GitHub Issue</strong>：https://github.com/VicLuoV5/FlowInvoice/issues</li>
+<li><strong>觉得好用请给个 Star ⭐</strong>：https://github.com/VicLuoV5/FlowInvoice</li>
+</ul>
+<hr>
+<p><em>极简票流 FlowInvoice · 纯本地离线 · MIT License</em></p>
+<hr>
+<p style="text-align:center; color:#8C8070; font-size:0.85em;">
+极简票流 FlowInvoice · 纯本地离线 · MIT License<br>
+<a href="https://github.com/VicLuoV5/FlowInvoice">https://github.com/VicLuoV5/FlowInvoice</a>
+</p>
+</body>
+</html>
