@@ -65,6 +65,20 @@ pyinstaller app.spec --clean
 # 产物在 dist/FlowInvoice.exe
 ```
 
+### 方式 C：macOS / Linux 用户
+
+暂未提供 `.app` / `.dmg` 打包（未做代码签名，Gatekeeper 体验不佳），请走源码路线：
+
+```bash
+git clone https://github.com/VicLuoV5/FlowInvoice.git
+cd FlowInvoice
+pip install -r requirements.txt
+streamlit run web_app.py     # 推荐：网页端体验最佳
+python app.py                # 桌面端也可用，已适配跨平台
+```
+
+**推荐网页端**的理由：UI 响应更快、数据可编辑、macOS 原生字体渲染更自然。桌面端仅在需要离线双击启动时才建议。
+
 ## 📖 使用流程
 
 ### 桌面端

@@ -1,4 +1,6 @@
 import os
+import sys
+import subprocess
 import threading
 import webbrowser
 import customtkinter as ctk
@@ -29,7 +31,12 @@ class FlowInvoiceApp(ctk.CTk):
             except Exception:
                 pass
 
-        self.MAIN_FONT   = "Microsoft YaHei"
+        if sys.platform == "darwin":
+            self.MAIN_FONT = "PingFang SC"
+        elif sys.platform == "win32":
+            self.MAIN_FONT = "Microsoft YaHei"
+        else:
+            self.MAIN_FONT = "Noto Sans CJK SC"
         self.CORAL       = "#D97757"
         self.CORAL_HOVER = "#C4694A"
         self.DARK        = "#3D3929"
@@ -161,7 +168,13 @@ class FlowInvoiceApp(ctk.CTk):
                         "请将需要处理的 PDF 或图片发票放入此文件夹。")
 
     def open_folder(self):
-        os.startfile(config.INPUT_FOLDER)
+        path = config.INPUT_FOLDER
+        if sys.platform == "win32":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", path])
+        else:
+            subprocess.Popen(["xdg-open", path])
 
     def _progress_text(self, prefix, cur, tot, name):
         display = name if len(name) <= 14 else name[:12] + ".."
