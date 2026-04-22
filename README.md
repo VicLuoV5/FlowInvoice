@@ -123,6 +123,12 @@ app.spec            PyInstaller 打包配置
 
 欢迎 Issue 与 PR。新票据类型、OCR 准确率优化、UI 改进都是优先方向。
 
+## 🙏 致谢
+
+本项目在代码编写、架构重构与文档整理过程中使用了 [Claude Code](https://claude.com/claude-code) 辅助开发。所有产品需求定义、设计决策、功能审美与最终验收均由人类作者主导，AI 作为 pair programmer 负责具体实现与迭代。
+
+仓库中的 `CLAUDE.md` 是面向 AI 协作者的开发约定，公开透明地记录了项目规则与边界，方便未来贡献者（无论人类还是 AI）快速对齐。
+
 ## 📜 License
 
 MIT
