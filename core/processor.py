@@ -555,8 +555,11 @@ def _write_excel(all_invoices, output_excel, submitter_name):
     df = pd.DataFrame(all_invoices)
     writer = pd.ExcelWriter(output_excel, engine='openpyxl')
     wb = writer.book
+    wb.calculation.calcMode = 'auto'
+    wb.calculation.fullCalcOnLoad = True
+    wb.calculation.forceFullCalc = True
 
-    # ── Sheet 1: 封面汇总（仅 A-C 三列，消除右侧空白） ──────
+    # ── Sheet 1: 封面汇总 ─────────────────────────────────────
     ws = wb.create_sheet("封面汇总", 0)
 
     def sc(row, col, value, bold=False, size=11, fg=None, bg=None, align='left', italic=False):
@@ -569,12 +572,12 @@ def _write_excel(all_invoices, output_excel, submitter_name):
         return c
 
     # 标题
-    ws.merge_cells('A1:C1')
+    ws.merge_cells('A1:E1')
     sc(1, 1, config.APP_NAME, bold=True, size=18, fg="FFFFFF", bg=CORAL, align='center')
     ws.row_dimensions[1].height = 42
 
     # 副标题
-    ws.merge_cells('A2:C2')
+    ws.merge_cells('A2:E2')
     sc(2, 1, config.APP_SUBTITLE, size=11, fg=DARK, bg=CORAL_LIGHT, align='center')
     ws.row_dimensions[2].height = 24
 
@@ -583,12 +586,12 @@ def _write_excel(all_invoices, output_excel, submitter_name):
 
     # 填报人 / 生成日期
     sc(4, 1, "填报人", bold=True)
-    ws.merge_cells('B4:C4')
+    ws.merge_cells('B4:E4')
     sc(4, 2, submitter_name if submitter_name else "（请填写）")
     ws.row_dimensions[4].height = 24
 
     sc(5, 1, "生成日期", bold=True)
-    ws.merge_cells('B5:C5')
+    ws.merge_cells('B5:E5')
     sc(5, 2, datetime.date.today().strftime("%Y年%m月%d日"))
     ws.row_dimensions[5].height = 24
 
@@ -596,47 +599,61 @@ def _write_excel(all_invoices, output_excel, submitter_name):
     ws.row_dimensions[6].height = 12
 
     # 汇总标题
-    ws.merge_cells('A7:C7')
+    ws.merge_cells('A7:E7')
     sc(7, 1, "—  报销分类汇总  —", bold=True, size=12, fg=CORAL, align='center')
     ws.row_dimensions[7].height = 26
 
     # 表头
-    for col, hdr in enumerate(["业务分类", "票据数量", "报销金额合计（元）"], 1):
+    summary_headers = ["业务分类", "票据数量", "不含税金额合计", "税额合计", "报销金额合计（元）"]
+    for col, hdr in enumerate(summary_headers, 1):
         c = sc(8, col, hdr, bold=True, fg="FFFFFF", bg=CORAL, align='center')
         c.border = cell_border
     ws.row_dimensions[8].height = 24
 
-    # 数据聚合
-    type_summary = {}
-    for inv in all_invoices:
-        t = inv["业务分类"]
-        try:
-            amt = float(inv["价税合计(报销额)"])
-        except (ValueError, TypeError):
-            amt = 0.0
-        entry = type_summary.setdefault(t, {"count": 0, "total": 0.0})
-        entry["count"] += 1
-        entry["total"] += amt
+    # 数据聚合：封面展示真实存在的分类，金额使用公式引用明细页，便于后续手工修正联动。
+    type_summary = Counter(inv["业务分类"] for inv in all_invoices)
+    ordered_types = [
+        inv_type for inv_type in config.BUSINESS_CATEGORY_ORDER
+        if inv_type in type_summary
+    ]
+    ordered_types.extend(
+        sorted(inv_type for inv_type in type_summary if inv_type not in config.BUSINESS_CATEGORY_ORDER)
+    )
 
-    data_row = 9
-    grand_total, grand_count = 0.0, 0
-    for inv_type, data in sorted(type_summary.items()):
+    first_summary_row = 9
+    data_row = first_summary_row
+    for inv_type in ordered_types:
         c1 = sc(data_row, 1, inv_type)
         c1.border = cell_border
-        c2 = sc(data_row, 2, data["count"], align='center')
+
+        c2 = ws.cell(row=data_row, column=2, value=f"=COUNTIF('报销明细'!$B:$B,A{data_row})")
         c2.border = cell_border
-        c3 = ws.cell(row=data_row, column=3, value=round(data["total"], 2))
-        c3.number_format = '#,##0.00'
-        c3.border = cell_border
-        c3.alignment = Alignment(horizontal='right', vertical='center')
-        c3.font = Font(name='Microsoft YaHei', color=DARK)
-        grand_total += data["total"]
-        grand_count += data["count"]
+        c2.alignment = Alignment(horizontal='center', vertical='center')
+        c2.font = Font(name='Microsoft YaHei', color=DARK)
+        c2.number_format = '#,##0'
+
+        formula_cols = {
+            3: "$E:$E",
+            4: "$F:$F",
+            5: "$G:$G",
+        }
+        for col, sum_range in formula_cols.items():
+            c = ws.cell(
+                row=data_row,
+                column=col,
+                value=f"=SUMIF('报销明细'!$B:$B,A{data_row},'报销明细'!{sum_range})",
+            )
+            c.number_format = '#,##0.00'
+            c.border = cell_border
+            c.alignment = Alignment(horizontal='right', vertical='center')
+            c.font = Font(name='Microsoft YaHei', color=DARK)
+
         ws.row_dimensions[data_row].height = 22
         data_row += 1
 
     # 合计行
-    for col in range(1, 4):
+    last_summary_row = data_row - 1
+    for col in range(1, len(summary_headers) + 1):
         c = ws.cell(row=data_row, column=col)
         c.fill = PatternFill("solid", fgColor=GRAY_LIGHT)
         c.border = cell_border
@@ -644,26 +661,28 @@ def _write_excel(all_invoices, output_excel, submitter_name):
         if col == 1:
             c.value = "合  计"
             c.alignment = Alignment(horizontal='left', vertical='center')
-        elif col == 2:
-            c.value = grand_count
-            c.alignment = Alignment(horizontal='center', vertical='center')
+        elif last_summary_row >= first_summary_row:
+            col_letter = get_column_letter(col)
+            c.value = f"=SUM({col_letter}{first_summary_row}:{col_letter}{last_summary_row})"
+            c.alignment = Alignment(horizontal='center' if col == 2 else 'right', vertical='center')
+            c.number_format = '#,##0' if col == 2 else '#,##0.00'
         else:
-            c.value = round(grand_total, 2)
-            c.number_format = '#,##0.00'
-            c.alignment = Alignment(horizontal='right', vertical='center')
+            c.value = 0
+            c.alignment = Alignment(horizontal='center' if col == 2 else 'right', vertical='center')
+            c.number_format = '#,##0' if col == 2 else '#,##0.00'
     ws.row_dimensions[data_row].height = 26
 
     # 餐饮税提示
     if any(inv["业务分类"] == "餐饮发票" for inv in all_invoices):
         note_row = data_row + 2
-        ws.merge_cells(f'A{note_row}:C{note_row}')
+        ws.merge_cells(f'A{note_row}:E{note_row}')
         c = ws.cell(row=note_row, column=1,
                     value="※ 餐饮税额不可抵扣，报销额为价税合计，详见明细页备注。")
         c.font = Font(name='Microsoft YaHei', color=CORAL, italic=True, size=10)
         c.alignment = Alignment(horizontal='left', vertical='center')
 
-    # 列宽（只设 A-C）
-    for col, w in zip('ABC', [22, 14, 26]):
+    # 列宽（只设 A-E）
+    for col, w in zip('ABCDE', [22, 12, 18, 14, 22]):
         ws.column_dimensions[col].width = w
 
     # ── Sheet 2: 报销明细 ─────────────────────────────────────
