@@ -1,4 +1,5 @@
 import os
+import sys
 
 # ================= 1. 品牌信息配置 =================
 APP_NAME = "极简票流 (FlowInvoice)"
@@ -6,7 +7,14 @@ APP_SUBTITLE = "智能发票提取与排版引擎"
 PAGE_TITLE = "极简票流 FlowInvoice"
 
 # ================= 2. 目录与路径配置 =================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+def get_app_base_dir():
+    """Return the writable app directory in source and PyInstaller builds."""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+BASE_DIR = get_app_base_dir()
 INPUT_FOLDER_NAME = "初始发票箱"  
 INPUT_FOLDER = os.path.join(BASE_DIR, INPUT_FOLDER_NAME)
 
@@ -18,6 +26,10 @@ TAXI_TAX_RATE = 1.03   # 出租车/公交定额票 (3%)
 # ================= 4. 排版与识别参数 =================
 MERGE_SCALE_FACTOR = 0.94  # 打印安全边距缩放，防止打印机物理裁切
 MAX_TAXI_AMOUNT = 2000      # 打车票金额上限，超出视为 OCR 误读（针式打印极度模糊时会把税号识别成金额）
+PDF_RENDER_ZOOM = 2.0       # 扫描版 PDF 页面 OCR 渲染倍率
+A4_PORTRAIT_SIZE = (595.0, 842.0)
+A4_LANDSCAPE_SIZE = (842.0, 595.0)
+MANUAL_REVIEW_TEXT = "⚠️ 需手动核对"
 
 # ================= 5. 识别置信度阈值 =================
 CONFIDENCE_HIGH_THRESHOLD = 80   # >= 80 不高亮（识别可信）

@@ -2,6 +2,7 @@ import os
 import datetime
 import fitz
 import re
+import tempfile
 from collections import Counter
 import pandas as pd
 from openpyxl.utils import get_column_letter
@@ -26,77 +27,224 @@ def merge_pdfs_logic(input_folder, output_filename, layout_mode='横向', progre
     files.sort()
 
     if not files:
+        merged_pdf.close()
         return False, "发票箱里空空如也，请先放入文件。"
 
     if layout_mode == '竖向':
-        canvas_w, canvas_h = 595.0, 842.0
+        canvas_w, canvas_h = config.A4_PORTRAIT_SIZE
     else:
-        canvas_w, canvas_h = 842.0, 595.0
+        canvas_w, canvas_h = config.A4_LANDSCAPE_SIZE
+
+    processed_files = 0
+    page_count = 0
+    failures = []
 
     for idx, filename in enumerate(files, 1):
         if progress_callback:
             progress_callback(idx, len(files), filename)
 
         file_path = os.path.join(input_folder, filename)
-        if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-            img_doc = fitz.open(file_path)
-            pdf_bytes = img_doc.convert_to_pdf()
-            current_pdf = fitz.open("pdf", pdf_bytes)
-        else:
-            current_pdf = fitz.open(file_path)
+        current_pdf = None
+        try:
+            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                img_doc = None
+                try:
+                    img_doc = fitz.open(file_path)
+                    pdf_bytes = img_doc.convert_to_pdf()
+                finally:
+                    if img_doc is not None:
+                        img_doc.close()
+                current_pdf = fitz.open("pdf", pdf_bytes)
+            else:
+                current_pdf = fitz.open(file_path)
 
-        for page in current_pdf:
-            new_page = merged_pdf.new_page(width=canvas_w, height=canvas_h)
-            src_w, src_h = page.rect.width, page.rect.height
+            file_pages = 0
+            for page in current_pdf:
+                new_page = merged_pdf.new_page(width=canvas_w, height=canvas_h)
+                src_w, src_h = page.rect.width, page.rect.height
 
-            rotation = 0
-            effective_w, effective_h = src_w, src_h
+                rotation = 0
+                effective_w, effective_h = src_w, src_h
 
-            is_canvas_landscape = canvas_w > canvas_h
-            is_source_landscape = src_w > src_h
+                is_canvas_landscape = canvas_w > canvas_h
+                is_source_landscape = src_w > src_h
 
-            if is_canvas_landscape != is_source_landscape:
-                rotation = 90
-                effective_w, effective_h = src_h, src_w
+                if is_canvas_landscape != is_source_landscape:
+                    rotation = 90
+                    effective_w, effective_h = src_h, src_w
 
-            scale = min(canvas_w / effective_w, canvas_h / effective_h) * config.MERGE_SCALE_FACTOR
+                scale = min(canvas_w / effective_w, canvas_h / effective_h) * config.MERGE_SCALE_FACTOR
 
-            new_w = effective_w * scale
-            new_h = effective_h * scale
-            x0 = (canvas_w - new_w) / 2
-            y0 = (canvas_h - new_h) / 2
-            target_rect = fitz.Rect(x0, y0, x0 + new_w, y0 + new_h)
+                new_w = effective_w * scale
+                new_h = effective_h * scale
+                x0 = (canvas_w - new_w) / 2
+                y0 = (canvas_h - new_h) / 2
+                target_rect = fitz.Rect(x0, y0, x0 + new_w, y0 + new_h)
 
-            new_page.show_pdf_page(target_rect, current_pdf, page.number, rotate=rotation)
+                new_page.show_pdf_page(target_rect, current_pdf, page.number, rotate=rotation)
+                file_pages += 1
+                page_count += 1
+
+            if file_pages:
+                processed_files += 1
+            else:
+                failures.append({"file": filename, "reason": "没有可排版页面"})
+        except Exception as e:
+            failures.append({"file": filename, "reason": f"读取失败：{e}"})
+        finally:
+            if current_pdf is not None:
+                try:
+                    current_pdf.close()
+                except Exception:
+                    pass
+
+    if page_count == 0:
+        merged_pdf.close()
+        if failures:
+            reasons = "\n".join(f"• {f['file']}：{f['reason']}" for f in failures[:5])
+            tail = f"\n（还有 {len(failures) - 5} 个...）" if len(failures) > 5 else ""
+            return False, f"未能合并任何有效页面。\n\n失败详情：\n{reasons}{tail}"
+        return False, "未能合并任何有效页面。"
 
     try:
         merged_pdf.save(output_filename)
         merged_pdf.close()
-        return True, f"成功合并 {len(files)} 份文件！"
     except Exception as e:
+        try:
+            merged_pdf.close()
+        except Exception:
+            pass
         return False, f"保存失败: {e}"
+
+    msg = f"成功合并 {processed_files} 份文件！"
+    if failures:
+        msg += f"\n\n⚠️ {len(failures)} 个文件失败："
+        for f in failures[:5]:
+            msg += f"\n• {f['file']}：{f['reason']}"
+        if len(failures) > 5:
+            msg += f"\n（还有 {len(failures) - 5} 个...）"
+    return True, msg
 
 
 # ================= 逻辑 B：智能提取数据 =================
 
-def _calc_confidence(date, num, total):
-    """计算单张票据识别置信度 (0-100)。"""
+def _format_amount(value, allow_zero=False):
+    if value is None:
+        return config.MANUAL_REVIEW_TEXT
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return config.MANUAL_REVIEW_TEXT
+    if amount < 0 or (amount == 0 and not allow_zero):
+        return config.MANUAL_REVIEW_TEXT
+    return f"{amount:.2f}"
+
+
+def _amounts_complete(total, net, tax):
+    return total > 0 and net is not None and tax is not None
+
+
+def _calc_confidence(date, num, total, amounts_complete=False):
+    """计算单张票据字段完整度得分 (0-100)。"""
     score = 0
     if date != "未抓取" and "模糊" not in date:
-        score += 30
+        score += 25
     elif date != "未抓取":
-        score += 15
+        score += 10
     if num != "未抓取":
         score += 20
     if total > 0:
-        score += 50
-    return score
+        score += 30
+    if amounts_complete:
+        score += 20
+    return min(score, 100)
+
+
+def _has_official_invoice_markers(clean_text):
+    return "电子发票" in clean_text or (
+        "发票号码" in clean_text and "开票日期" in clean_text and "税率/征收率" in clean_text
+    )
+
+
+def _is_non_invoice_document(clean_text):
+    if "航空运输电子客票行程单" in clean_text:
+        return False
+    non_invoice_markers = (
+        "行程单",
+        "AMAPITINERARY",
+        "DIDITRAVEL",
+        "TRIPTABLE",
+        "结账单",
+        "账单号",
+        "Balance/余额",
+        "INFORMATIONINVOICE",
+    )
+    return any(marker in clean_text for marker in non_invoice_markers) and not _has_official_invoice_markers(clean_text)
+
+
+def _extract_invoice_number(clean_text, raw_text=""):
+    source_text = raw_text or clean_text
+    long_candidates = re.findall(r'(?<![0-9A-Za-z])(\d{16,24})(?![0-9A-Za-z])', source_text)
+    if long_candidates:
+        return long_candidates[0]
+
+    near_label = re.search(
+        r'(?:发票号码|号码|No)[：:]?[^0-9A-Za-z]{0,120}(\d{8,24})',
+        source_text,
+        re.IGNORECASE,
+    )
+    if near_label:
+        return near_label.group(1)
+
+    fallback = re.search(r'(?<![0-9A-Za-z])(\d{8})(?![0-9A-Za-z])', source_text)
+    if fallback:
+        return fallback.group(1)
+    return "未抓取"
+
+
+def _extract_labeled_total(clean_text):
+    patterns = (
+        r'[零壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元角分整]{2,}[^\d]{0,40}[¥￥](\d+\.\d{2})',
+        r'(?:（小写）|\(小写\)|小写)[^\d]{0,120}[¥￥]?(\d+\.\d{2})',
+        r'(?:价税合计|总计)[^\d]{0,160}[¥￥]?(\d+\.\d{2})',
+    )
+    for pattern in patterns:
+        match = re.search(pattern, clean_text)
+        if match:
+            return float(match.group(1))
+    return 0.0
+
+
+def _pair_net_tax(total, nums):
+    if total <= 0:
+        return None, None
+    fallback_pair = None
+    for i in range(len(nums)):
+        for j in range(i + 1, len(nums)):
+            if abs((nums[i] + nums[j]) - total) <= 0.02:
+                pair = (max(nums[i], nums[j]), min(nums[i], nums[j]))
+                uses_total_value = abs(nums[i] - total) <= 0.001 or abs(nums[j] - total) <= 0.001
+                if uses_total_value:
+                    fallback_pair = fallback_pair or pair
+                    continue
+                return pair
+    if fallback_pair is not None:
+        return fallback_pair
+    return None, None
+
+
+def _extract_invoice_amounts(clean_text, nums):
+    total = _extract_labeled_total(clean_text)
+    if total <= 0 and nums:
+        total = max(nums)
+    net, tax = _pair_net_tax(total, nums)
+    return total, net, tax
 
 
 def _classify_and_extract(filename, clean_text, nums):
     """对一段清洗后的文本进行分类 + 金额提取。失败返回 None。"""
     is_valid = False
-    inv_type, total, net, tax = "未知票据", 0.0, 0.0, 0.0
+    inv_type, total, net, tax = "未知票据", 0.0, None, None
 
     if "航空运输电子客票行程单" in clean_text or "机票" in clean_text or "航空客票" in clean_text:
         is_valid, inv_type = True, "机票行程单"
@@ -116,7 +264,7 @@ def _classify_and_extract(filename, clean_text, nums):
                 net = round(taxable / config.FLIGHT_TAX_RATE, 2)
                 tax = round(taxable - net, 2)
                 net = round(total - tax, 2)
-            else:
+            elif total > 0:
                 net = round(total / config.FLIGHT_TAX_RATE, 2)
                 tax = round(total - net, 2)
 
@@ -124,8 +272,9 @@ def _classify_and_extract(filename, clean_text, nums):
         is_valid, inv_type = True, "高铁/火车票"
         m_t = re.search(r'[¥￥]?(\d+\.\d{2})', clean_text)
         total = float(m_t.group(1)) if m_t else (nums[0] if nums else 0.0)
-        net = round(total / config.HSR_TAX_RATE, 2)
-        tax = round(total - net, 2)
+        if total > 0:
+            net = round(total / config.HSR_TAX_RATE, 2)
+            tax = round(total - net, 2)
 
     elif any(k in clean_text for k in ["出租", "打车", "运输服务", "上车", "下车", "里程", "等候", "机打发票"]):
         is_valid, inv_type = True, "打车/交通票"
@@ -133,21 +282,24 @@ def _classify_and_extract(filename, clean_text, nums):
         m_yuan = re.search(r'(\d{1,4}(?:[\.,]\d{1,2})?)[元]', clean_text)
         m_taxi = re.search(r'(?:总额|实收|附加|金额|应收)[^\d]{0,6}(\d{1,4}(?:[\.,]\d{1,2})?)', clean_text)
 
-        if m_yuan:
-            total = float(m_yuan.group(1).replace(',', '.'))
-        elif m_taxi:
-            total = float(m_taxi.group(1).replace(',', '.'))
+        if _has_official_invoice_markers(clean_text):
+            total, net, tax = _extract_invoice_amounts(clean_text, nums)
         else:
-            valid_taxi_nums = [n for n in nums if n < config.MAX_TAXI_AMOUNT]
-            if valid_taxi_nums:
-                total = valid_taxi_nums[0]
+            if m_yuan:
+                total = float(m_yuan.group(1).replace(',', '.'))
+            elif m_taxi:
+                total = float(m_taxi.group(1).replace(',', '.'))
+            else:
+                valid_taxi_nums = [n for n in nums if n < config.MAX_TAXI_AMOUNT]
+                if valid_taxi_nums:
+                    total = valid_taxi_nums[0]
 
-        if total >= config.MAX_TAXI_AMOUNT:
-            total = 0.0
+            if total >= config.MAX_TAXI_AMOUNT:
+                total = 0.0
 
-        if total > 0:
-            net = round(total / config.TAXI_TAX_RATE, 2)
-            tax = round(total - net, 2)
+            if total > 0:
+                net = round(total / config.TAXI_TAX_RATE, 2)
+                tax = round(total - net, 2)
 
     elif any(k in clean_text for k in ["中国石油", "中国石化", "加油站", "成品油", "汽油", "柴油"]):
         is_valid, inv_type = True, "加油费"
@@ -167,23 +319,66 @@ def _classify_and_extract(filename, clean_text, nums):
     # 增值税发票类通用算法（金额配对）
     VAT_TYPES = {"餐饮发票", "住宿发票", "增值税发票", "加油费", "通讯费"}
     if is_valid and inv_type in VAT_TYPES:
-        m_t = re.search(r'(?:价税合计|小写|总计)[a-zA-Z¥￥]*(\d+\.\d{2})', clean_text)
-        if m_t:
-            total = float(m_t.group(1))
-        elif nums:
-            total = nums[0]
-
-        if total > 0:
-            pool = nums + [0.00] if 0.00 not in nums else nums
-            for i in range(len(pool)):
-                for j in range(i, len(pool)):
-                    if abs((pool[i] + pool[j]) - total) <= 0.02:
-                        net, tax = max(pool[i], pool[j]), min(pool[i], pool[j])
-                        break
+        total, net, tax = _extract_invoice_amounts(clean_text, nums)
 
     if not is_valid:
         return None
     return inv_type, total, net, tax
+
+
+def _ocr_items_to_text(ocr_result):
+    if not ocr_result:
+        return ""
+    texts = []
+    for item in ocr_result:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            text = item[1]
+        else:
+            text = item
+        if text is not None:
+            texts.append(str(text))
+    return " ".join(texts)
+
+
+def _run_ocr(ocr_engine, image_path):
+    ocr_result, _ = ocr_engine(image_path)
+    return _ocr_items_to_text(ocr_result)
+
+
+def _ocr_pdf_page(page, ocr_engine):
+    matrix = fitz.Matrix(config.PDF_RENDER_ZOOM, config.PDF_RENDER_ZOOM)
+    pix = page.get_pixmap(matrix=matrix, alpha=False)
+    fd, tmp_path = tempfile.mkstemp(suffix=".png")
+    os.close(fd)
+    try:
+        pix.save(tmp_path)
+        return _run_ocr(ocr_engine, tmp_path)
+    finally:
+        try:
+            os.remove(tmp_path)
+        except FileNotFoundError:
+            pass
+
+
+def _extract_text_from_file(file_path, get_ocr_engine):
+    filename = os.path.basename(file_path)
+    if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+        return _run_ocr(get_ocr_engine(), file_path)
+
+    doc = fitz.open(file_path)
+    chunks = []
+    try:
+        for page in doc:
+            page_text = page.get_text("text").replace('\n', ' ')
+            if page_text.strip():
+                chunks.append(page_text)
+            else:
+                ocr_text = _ocr_pdf_page(page, get_ocr_engine())
+                if ocr_text.strip():
+                    chunks.append(ocr_text)
+    finally:
+        doc.close()
+    return " ".join(chunks)
 
 
 def extract_invoices_data(input_folder, progress_callback=None):
@@ -196,14 +391,18 @@ def extract_invoices_data(input_folder, progress_callback=None):
     """
     valid_exts = ('.pdf', '.jpg', '.jpeg', '.png')
     files = [os.path.basename(f) for f in os.listdir(input_folder) if f.lower().endswith(valid_exts)]
+    files.sort()
 
     if not files:
         return [], []
 
-    try:
-        ocr_engine = RapidOCR()
-    except Exception as e:
-        return [], [{"file": "(OCR 初始化)", "reason": str(e)}]
+    ocr_engine = None
+
+    def get_ocr_engine():
+        nonlocal ocr_engine
+        if ocr_engine is None:
+            ocr_engine = RapidOCR()
+        return ocr_engine
 
     all_invoices = []
     failures = []
@@ -213,19 +412,10 @@ def extract_invoices_data(input_folder, progress_callback=None):
             progress_callback(idx, len(files), filename)
 
         file_path = os.path.join(input_folder, filename)
-        raw_text = ""
         try:
-            if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                ocr_result, _ = ocr_engine(file_path)
-                if ocr_result:
-                    raw_text = " ".join([item[1] for item in ocr_result])
-            else:
-                doc = fitz.open(file_path)
-                for page in doc:
-                    raw_text += page.get_text("text").replace('\n', ' ') + " "
-                doc.close()
+            raw_text = _extract_text_from_file(file_path, get_ocr_engine)
         except Exception as e:
-            failures.append({"file": filename, "reason": f"读取失败：{e}"})
+            failures.append({"file": filename, "reason": f"读取/OCR 失败：{e}"})
             continue
 
         if not raw_text.strip():
@@ -246,19 +436,16 @@ def extract_invoices_data(input_folder, progress_callback=None):
                 y, m = m_date2.groups()
                 date = f"{y}年{m.zfill(2)}月(日模糊)"
 
-        # 发票号码
-        num = "未抓取"
-        m_num = re.search(r'(?:发票号码|号码|No)[：:]?(\d{8,24})', clean_text, re.IGNORECASE)
-        if m_num:
-            num = m_num.group(1)
-        else:
-            m_num_fallback = re.search(r'(?<!\d)(\d{8})(?!\d)', clean_text)
-            if m_num_fallback:
-                num = m_num_fallback.group(1)
+        if _is_non_invoice_document(clean_text):
+            failures.append({"file": filename, "reason": "非发票文件（行程单/结账单）"})
+            continue
 
-        # 数字池
-        nums = [float(x) for x in re.findall(r'\d+\.\d{2}', clean_text)]
-        nums = sorted(list(set([a for a in nums if a < 1000000])), reverse=True)
+        # 发票号码
+        num = _extract_invoice_number(clean_text, raw_text)
+
+        # 数字池：必须保留 raw_text 的数字边界，避免 "36.86 1 36.86" 被拼成假金额。
+        amount_tokens = re.findall(r'(?<!\d)(\d+\.\d{2})(?!\d)', raw_text)
+        nums = sorted(list(set([float(a) for a in amount_tokens if float(a) < 1000000])), reverse=True)
 
         # 分类 + 金额提取
         result = _classify_and_extract(filename, clean_text, nums)
@@ -267,16 +454,19 @@ def extract_invoices_data(input_folder, progress_callback=None):
             continue
 
         inv_type, total, net, tax = result
+        amounts_complete = _amounts_complete(total, net, tax)
 
-        str_total = f"{total:.2f}" if total > 0 else "⚠️ 需手动核对"
-        str_net   = f"{net:.2f}"   if total > 0 else "⚠️ 需手动核对"
-        str_tax   = f"{tax:.2f}"   if total > 0 else "⚠️ 需手动核对"
+        str_total = _format_amount(total)
+        str_net = _format_amount(net)
+        str_tax = _format_amount(tax, allow_zero=True)
 
-        remark = ""
+        remarks = []
         if inv_type == "餐饮发票":
-            remark = "餐饮税额不可抵扣"
-        elif total == 0:
-            remark = "字迹太模糊，请人工核票"
+            remarks.append("餐饮税额不可抵扣")
+        if total == 0:
+            remarks.append("字迹太模糊，请人工核票")
+        elif not amounts_complete:
+            remarks.append("税额需人工核对")
 
         all_invoices.append({
             "文件名": filename,
@@ -286,8 +476,8 @@ def extract_invoices_data(input_folder, progress_callback=None):
             "不含税金额": str_net,
             "税额": str_tax,
             "价税合计(报销额)": str_total,
-            "置信度(%)": _calc_confidence(date, num, total),
-            "备注": remark,
+            "置信度(%)": _calc_confidence(date, num, total, amounts_complete),
+            "备注": " · ".join(remarks),
         })
 
     # 重复发票号检测
@@ -311,7 +501,10 @@ def write_excel_from_data(invoices, output_excel, submitter_name=""):
     if not invoices:
         return False, "无数据可写入。"
 
-    _write_excel(invoices, output_excel, submitter_name)
+    try:
+        _write_excel(invoices, output_excel, submitter_name)
+    except Exception as e:
+        return False, f"Excel 生成失败: {e}"
     return True, f"Excel 已生成，共 {len(invoices)} 张票据"
 
 
@@ -332,7 +525,10 @@ def extract_data_logic(input_folder, output_excel, submitter_name="", progress_c
             return False, f"未提取到任何有效数据。\n\n失败详情：\n{reasons}{tail}"
         return False, "未找到有效文件。"
 
-    _write_excel(invoices, output_excel, submitter_name)
+    try:
+        _write_excel(invoices, output_excel, submitter_name)
+    except Exception as e:
+        return False, f"Excel 生成失败: {e}"
 
     msg = f"提取成功，共 {len(invoices)} 张票据"
     if failures:

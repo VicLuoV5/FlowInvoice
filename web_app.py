@@ -28,6 +28,11 @@ uploaded_files = st.file_uploader(
 def _files_fingerprint(files):
     return tuple((f.name, f.size) for f in files) if files else None
 
+
+def _stored_upload_name(index, original_name):
+    name = os.path.basename(original_name) or f"invoice_{index}"
+    return f"{index:03d}_{name}"
+
 current_fp = _files_fingerprint(uploaded_files)
 if st.session_state.get("last_file_fp") != current_fp:
     st.session_state["last_file_fp"] = current_fp
@@ -49,8 +54,8 @@ if uploaded_files:
         if st.button("1. 一键智能排版", use_container_width=True, type="primary"):
             bar = st.progress(0, text="准备中...")
             with tempfile.TemporaryDirectory() as tmp:
-                for f in uploaded_files:
-                    with open(os.path.join(tmp, os.path.basename(f.name)), "wb") as b:
+                for idx, f in enumerate(uploaded_files, 1):
+                    with open(os.path.join(tmp, _stored_upload_name(idx, f.name)), "wb") as b:
                         b.write(f.getbuffer())
 
                 def cb(cur, tot, name):
@@ -75,8 +80,8 @@ if uploaded_files:
         if st.button("2. AI 提取算税", use_container_width=True):
             bar = st.progress(0, text="准备中...")
             with tempfile.TemporaryDirectory() as tmp:
-                for f in uploaded_files:
-                    with open(os.path.join(tmp, os.path.basename(f.name)), "wb") as b:
+                for idx, f in enumerate(uploaded_files, 1):
+                    with open(os.path.join(tmp, _stored_upload_name(idx, f.name)), "wb") as b:
                         b.write(f.getbuffer())
 
                 def cb(cur, tot, name):

@@ -192,18 +192,24 @@ class FlowInvoiceApp(ctk.CTk):
             self.after(0, lambda t=txt: self.btn_typeset.configure(text=t))
 
         def worker():
-            success, msg = merge_pdfs_logic(
-                config.INPUT_FOLDER, f'合并后_报销单({mode}).pdf',
-                layout_mode=mode, progress_callback=on_progress)
-            self.after(0, lambda: self._on_merge_done(msg))
+            try:
+                success, msg = merge_pdfs_logic(
+                    config.INPUT_FOLDER, f'合并后_报销单({mode}).pdf',
+                    layout_mode=mode, progress_callback=on_progress)
+            except Exception as e:
+                success, msg = False, f"处理失败：{e}"
+            self.after(0, lambda s=success, m=msg: self._on_merge_done(s, m))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_merge_done(self, msg):
+    def _on_merge_done(self, success, msg):
         self.btn_typeset.configure(state="normal",
                                    text="               1 .   一  键  智  能  排  版")
         self.btn_extract.configure(state="normal")
-        messagebox.showinfo("处理结果", msg)
+        if success:
+            messagebox.showinfo("处理结果", msg)
+        else:
+            messagebox.showerror("处理失败", msg)
 
     def click_extract(self):
         self.check_env()
@@ -216,18 +222,24 @@ class FlowInvoiceApp(ctk.CTk):
             self.after(0, lambda t=txt: self.btn_extract.configure(text=t))
 
         def worker():
-            success, msg = extract_data_logic(
-                config.INPUT_FOLDER, '发票报销明细汇总.xlsx',
-                progress_callback=on_progress)
-            self.after(0, lambda: self._on_extract_done(msg))
+            try:
+                success, msg = extract_data_logic(
+                    config.INPUT_FOLDER, '发票报销明细汇总.xlsx',
+                    progress_callback=on_progress)
+            except Exception as e:
+                success, msg = False, f"处理失败：{e}"
+            self.after(0, lambda s=success, m=msg: self._on_extract_done(s, m))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_extract_done(self, msg):
+    def _on_extract_done(self, success, msg):
         self.btn_extract.configure(state="normal",
                                    text="               2 .   A   I   提  取  算  税")
         self.btn_typeset.configure(state="normal")
-        messagebox.showinfo("处理结果", msg)
+        if success:
+            messagebox.showinfo("处理结果", msg)
+        else:
+            messagebox.showerror("处理失败", msg)
 
     def click_clear(self):
         self.check_env()
